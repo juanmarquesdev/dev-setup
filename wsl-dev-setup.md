@@ -248,9 +248,9 @@ git config --global core.pager ''
 ### 7.1 Instalar npiperelay no Windows
 
 ```powershell
-winget install --id albertony.npiperelay -e
+winget install --id jstarks.npiperelay -e
 
-$src = Get-ChildItem "$env:LOCALAPPDATA\Microsoft\WinGet\Packages\albertony.npiperelay*" `
+$src = Get-ChildItem "$env:LOCALAPPDATA\Microsoft\WinGet\Packages\jstarks.npiperelay*" `
   -Recurse -Filter "npiperelay.exe" | Select-Object -ExpandProperty FullName
 Copy-Item $src "$env:LOCALAPPDATA\Microsoft\WindowsApps\npiperelay.exe" -Force
 ```

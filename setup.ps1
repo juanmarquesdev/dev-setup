@@ -324,9 +324,9 @@ else {
 Write-Step 5 7 "npiperelay"
 if (Step-Skip "npipe") { Write-Ok "npiperelay — etapa já concluída" }
 else {
-    Install-WingetPkg "albertony.npiperelay" "npiperelay"
+    Install-WingetPkg "jstarks.npiperelay" "npiperelay"
 
-    $npipe = Get-ChildItem "$env:LOCALAPPDATA\Microsoft\WinGet\Packages\albertony.npiperelay*" `
+    $npipe = Get-ChildItem "$env:LOCALAPPDATA\Microsoft\WinGet\Packages\jstarks.npiperelay*" `
         -Recurse -Filter "npiperelay.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
     if ($npipe) {
         Copy-Item $npipe.FullName "$env:LOCALAPPDATA\Microsoft\WindowsApps\npiperelay.exe" -Force
