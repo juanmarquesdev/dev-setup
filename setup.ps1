@@ -71,12 +71,20 @@ function Step-Skip {
 }
 
 function Register-ResumeTask {
-    $action    = New-ScheduledTaskAction -Execute "pwsh.exe" `
-        -Argument "-NoProfile -ExecutionPolicy Bypass -File `"$($script:State.ScriptPath)`""
-    $trigger   = New-ScheduledTaskTrigger -AtLogOn
+    # Resolve full path to pwsh.exe so the task works even when PATH is minimal at logon
+    $pwsh = (Get-Command pwsh -ErrorAction SilentlyContinue)?.Source
+    if (-not $pwsh) {
+        $pwsh = "$env:ProgramFiles\PowerShell\7\pwsh.exe"
+    }
+    $scriptDir = Split-Path $script:State.ScriptPath -Parent
+    $action    = New-ScheduledTaskAction -Execute $pwsh `
+        -Argument "-NoProfile -ExecutionPolicy Bypass -File `"$($script:State.ScriptPath)`"" `
+        -WorkingDirectory $scriptDir
+    $trigger   = New-ScheduledTaskTrigger -AtLogOn -User $env:USERNAME
     $principal = New-ScheduledTaskPrincipal -UserId $env:USERNAME -RunLevel Highest
+    $settings  = New-ScheduledTaskSettingsSet -ExecutionTimeLimit (New-TimeSpan -Hours 2)
     Register-ScheduledTask -TaskName $TaskName -Action $action `
-        -Trigger $trigger -Principal $principal -Force | Out-Null
+        -Trigger $trigger -Principal $principal -Settings $settings -Force | Out-Null
 }
 
 function Unregister-ResumeTask {
@@ -291,7 +299,7 @@ else {
         Write-Ok "$($Config.WslDistro) já instalado"
     } else {
         Write-Info "Instalando $($Config.WslDistro)..."
-        wsl --install $Config.WslDistro
+        wsl --install $Config.WslDistro --no-launch
         # Instalar distro não exige reboot do Windows — é apenas extração de tarball
         Write-Ok "$($Config.WslDistro) instalado"
     }
@@ -384,7 +392,8 @@ else {
 
         # Atualizar perfil Arch
         $archProfile = $json.profiles.list | Where-Object {
-            $_.name -match "arch" -or $_.source -match "arch"
+            $_.name -match "arch" -or
+            ($_.PSObject.Properties['source'] -and $_.source -match "arch")
         } | Select-Object -First 1
 
         if ($archProfile) {
