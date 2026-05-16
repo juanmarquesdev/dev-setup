@@ -504,7 +504,9 @@ SETUP_DOTFILES_PKGS="$($Config.DotfilesPkgs)"
     Write-Host ""
     Write-Host "       export SSH_AUTH_SOCK=`$HOME/.ssh/agent.sock" -ForegroundColor Cyan
     Write-Host "       rm -f `$SSH_AUTH_SOCK" -ForegroundColor Cyan
-    Write-Host "       setsid socat UNIX-LISTEN:`$SSH_AUTH_SOCK,fork EXEC:`"npiperelay.exe -ei -s //./pipe/openssh-ssh-agent`" &" -ForegroundColor Cyan
+    Write-Host "       NPIPERELAY=`$(wslpath -u `"`$(cmd.exe /c 'where npiperelay.exe' 2>/dev/null | tr -d '\r')`")" -ForegroundColor Cyan
+    Write-Host "       setsid socat UNIX-LISTEN:`$SSH_AUTH_SOCK,fork EXEC:`"`"`$NPIPERELAY`" -ei -s //./pipe/openssh-ssh-agent`" &" -ForegroundColor Cyan
+    Write-Host "       sleep 1 && ssh-add -l" -ForegroundColor Cyan
     Write-Host ""
     Write-Host "  Sem o socket ativo o clone dos dotfiles irá travar." -ForegroundColor Gray
     Write-Host ""
