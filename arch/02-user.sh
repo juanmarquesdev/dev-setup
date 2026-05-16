@@ -49,7 +49,7 @@ title "Arch Linux — User Setup"
 info "Usuário: $(whoami)"
 
 # ─── 1. paru (AUR helper) ───────────────────────────────────────────────────
-step "[1/8] paru (AUR helper)"
+step "[1/9] paru (AUR helper)"
 
 if is_installed paru; then
     ok "paru já instalado"
@@ -64,7 +64,7 @@ else
 fi
 
 # ─── 2. Pacotes pacman ──────────────────────────────────────────────────────
-step "[2/8] Pacotes CLI e ferramentas"
+step "[2/9] Pacotes CLI e ferramentas"
 
 PACMAN_PKGS=(
     # Shell
@@ -86,8 +86,33 @@ PACMAN_PKGS=(
 sudo pacman -S --noconfirm --needed "${PACMAN_PKGS[@]}"
 ok "Pacotes instalados: ${PACMAN_PKGS[*]}"
 
-# ─── 3. oh-my-zsh ───────────────────────────────────────────────────────────
-step "[3/8] oh-my-zsh"
+# ─── 3. Docker via paru ─────────────────────────────────────────────────────
+step "[3/9] Docker, docker-compose e asdf"
+
+AUR_PKGS=(docker docker-compose asdf-vm)
+
+for pkg in "${AUR_PKGS[@]}"; do
+    if paru -Qi "$pkg" &>/dev/null; then
+        info "$pkg já instalado"
+    else
+        paru -S --noconfirm --needed "$pkg"
+        info "$pkg instalado"
+    fi
+done
+
+# Habilitar e iniciar serviço docker
+sudo systemctl enable --now docker 2>/dev/null || warn "systemctl não disponível (WSL sem systemd?)"
+
+# Adicionar usuário ao grupo docker para uso sem sudo
+if ! groups "$(whoami)" | grep -qw docker; then
+    sudo usermod -aG docker "$(whoami)"
+    warn "Usuário adicionado ao grupo docker — reinicie a sessão para aplicar"
+fi
+
+ok "Docker e asdf instalados"
+
+# ─── 4. oh-my-zsh ───────────────────────────────────────────────────────────
+step "[4/9] oh-my-zsh"
 
 ZSH_DIR="$HOME/.oh-my-zsh"
 CUSTOM_DIR="$ZSH_DIR/custom"
@@ -100,7 +125,7 @@ else
 fi
 
 # ─── Plugins ────────────────────────────────────────────────────────────────
-step "[4/8] Plugins zsh + Powerlevel10k"
+step "[5/9] Plugins zsh + Powerlevel10k"
 
 declare -A PLUGINS=(
     ["zsh-autosuggestions"]="https://github.com/zsh-users/zsh-autosuggestions"
@@ -129,7 +154,7 @@ fi
 ok "Plugins e tema instalados"
 
 # ─── 5. Dotfiles ────────────────────────────────────────────────────────────
-step "[5/8] Dotfiles"
+step "[6/9] Dotfiles"
 
 if dir_exists "$HOME/dotfiles"; then
     ok "Dotfiles já clonados — atualizando..."
@@ -176,7 +201,7 @@ done
 ok "Dotfiles aplicados"
 
 # ─── 6. Git config ──────────────────────────────────────────────────────────
-step "[6/8] Git"
+step "[7/9] Git"
 
 git config --global user.name      "$SETUP_GIT_NAME"
 git config --global user.email     "$SETUP_GIT_EMAIL"
@@ -189,7 +214,7 @@ git config --global core.pager     ""
 ok "Git configurado: $SETUP_GIT_NAME <$SETUP_GIT_EMAIL>"
 
 # ─── 7. Git SSH signing ─────────────────────────────────────────────────────
-step "[7/8] Git — SSH signing"
+step "[8/9] Git — SSH signing"
 
 # Verifica se a chave pública existe (via dotfiles ou diretamente)
 SSH_SIGNING_KEY="$HOME/.ssh/pessoal.pub"
@@ -215,7 +240,7 @@ else
 fi
 
 # ─── 8. Default shell → zsh ─────────────────────────────────────────────────
-step "[8/8] Shell padrão"
+step "[9/9] Shell padrão"
 
 CURRENT_SHELL=$(getent passwd "$(whoami)" | cut -d: -f7)
 if [[ "$CURRENT_SHELL" == *"zsh" ]]; then
