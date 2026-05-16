@@ -165,8 +165,10 @@ if (Test-Path $StateFile) {
         $gitEmail = (Read-Host "  Email Git (obrigatório)").Trim()
     }
 
-    $in = (Read-Host "  Dotfiles repo [git@github.com:$wslUser/dotfiles.git]").Trim()
-    $dotfilesRepo = if ($in) { $in } else { "git@github.com:$wslUser/dotfiles.git" }
+    $dotfilesRepo = ""
+    while (-not $dotfilesRepo) {
+        $dotfilesRepo = (Read-Host "  Repositório de dotfiles para clonar (obrigatório)").Trim()
+    }
 
     $in = (Read-Host "  Dotfiles pacotes [zsh git tmux ssh]").Trim()
     $dotfilesPkgs = if ($in) { $in } else { "zsh git tmux ssh" }

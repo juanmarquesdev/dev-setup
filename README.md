@@ -55,7 +55,7 @@ Na primeira execução, o script pergunta:
 - distro WSL (default: `archlinux`)
 - usuário Linux
 - nome e email do Git
-- repositório de dotfiles
+- repositório de dotfiles para clonar (obrigatório)
 - pacotes do stow
 - senha do usuário Linux
 

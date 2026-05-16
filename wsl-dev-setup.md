@@ -13,12 +13,13 @@ Set-ExecutionPolicy Bypass -Scope Process -Force
 ```
 
 O script cobre setup de Windows, setup root no Arch, setup de usuario no Arch e retomada apos reboot.
+Durante a execucao, ele pergunta qual repositorio de dotfiles deve ser clonado.
 
 ## Repositorio
 
 - Repo principal: https://github.com/juanmarquesdev/dev-setup
 - README automatizado: `dev-setup/README.md`
-- Dotfiles: https://github.com/juanmarquesdev/dotfiles
+- Dotfiles: use o seu proprio repositorio de dotfiles
 
 ---
 
@@ -285,7 +286,7 @@ ssh -T git@github.com
 ## 8. Dotfiles com GNU Stow
 
 ```bash
-git clone git@github.com:juanmarquesdev/dotfiles.git ~/dotfiles
+git clone git@github.com:SEU_USUARIO/SEU_REPO_DOTFILES.git ~/dotfiles
 cd ~/dotfiles
 stow zsh git tmux ssh
 ```
