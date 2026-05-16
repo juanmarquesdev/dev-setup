@@ -35,6 +35,15 @@ function Write-Ok    { param($msg) Write-Host "  ✔  $msg" -ForegroundColor Gre
 function Write-Warn  { param($msg) Write-Host "  ⚠  $msg" -ForegroundColor Yellow }
 function Write-Info  { param($msg) Write-Host "     $msg" -ForegroundColor Gray }
 
+function Convert-ToUnixLineEndings {
+    param([string]$Path)
+    Get-ChildItem $Path -Recurse -File | ForEach-Object {
+        $content = [System.IO.File]::ReadAllText($_.FullName) -replace "`r`n", "`n"
+        [System.IO.File]::WriteAllText($_.FullName, $content,
+            (New-Object System.Text.UTF8Encoding $false))
+    }
+}
+
 function Test-WingetPkg {
     param($id)
     $out = winget list --id $id --exact 2>&1
@@ -445,6 +454,7 @@ SETUP_DOTFILES_REPO="$($Config.DotfilesRepo)"
 SETUP_DOTFILES_PKGS="$($Config.DotfilesPkgs)"
 "@
     Set-Content "$tmpSetup\config.env" -Value $configEnv -Encoding UTF8 -NoNewline
+    Convert-ToUnixLineEndings $tmpSetup
 
     Write-Info "Executando 01-root.sh em $($Config.WslDistro)..."
     Write-Host ""
@@ -482,6 +492,7 @@ SETUP_DOTFILES_REPO="$($Config.DotfilesRepo)"
 SETUP_DOTFILES_PKGS="$($Config.DotfilesPkgs)"
 "@
         Set-Content "$tmpSetup\config.env" -Value $configEnv -Encoding UTF8 -NoNewline
+        Convert-ToUnixLineEndings $tmpSetup
     }
 
     Write-Info "Executando 02-user.sh como '$($Config.WslUser)'..."
