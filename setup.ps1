@@ -242,7 +242,7 @@ if (Step-Skip "font") { Write-Ok "Nerd Font — etapa já concluída" }
 else {
     $regFonts   = "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Fonts"
     $fontNames  = (Get-ItemProperty $regFonts).PSObject.Properties.Name
-    $fontExists = (Get-ChildItem "$env:WINDIR\Fonts" -Filter "CaskaydiaMonoNerdFont*.ttf" `
+    $fontExists = @(Get-ChildItem "$env:WINDIR\Fonts" -Filter "CascaydiaMono NF*.ttf" `
                       -ErrorAction SilentlyContinue).Count -gt 0
 
     if ($fontExists) {
@@ -258,7 +258,7 @@ else {
 
         $shell = New-Object -ComObject Shell.Application
         $fontsFolder = $shell.Namespace(0x14)   # ssfFONTS
-        Get-ChildItem $tmpDir -Filter "CaskaydiaMonoNerdFont*.ttf" | ForEach-Object {
+        Get-ChildItem $tmpDir -Filter "CascaydiaMono NF*.ttf" | ForEach-Object {
             if (-not (Test-Path "$env:WINDIR\Fonts\$($_.Name)")) {
                 $fontsFolder.CopyHere($_.FullName, 0x10)
             }
