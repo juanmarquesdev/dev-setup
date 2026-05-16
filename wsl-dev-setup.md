@@ -250,8 +250,8 @@ git config --global core.pager ''
 ```powershell
 winget install --id jstarks.npiperelay -e
 
-$src = Get-ChildItem "$env:LOCALAPPDATA\Microsoft\WinGet\Packages\jstarks.npiperelay*" `
-  -Recurse -Filter "npiperelay.exe" | Select-Object -ExpandProperty FullName
+$src = Get-ChildItem "$env:LOCALAPPDATA\Microsoft\WinGet\Packages" `
+  -Recurse -Filter "npiperelay.exe" | Where-Object { $_.Length -gt 0 } | Select-Object -ExpandProperty FullName -First 1
 Copy-Item $src "$env:LOCALAPPDATA\Microsoft\WindowsApps\npiperelay.exe" -Force
 ```
 
@@ -261,10 +261,17 @@ Copy-Item $src "$env:LOCALAPPDATA\Microsoft\WindowsApps\npiperelay.exe" -Force
 if grep -qi microsoft /proc/version; then
   export SSH_AUTH_SOCK="$HOME/.ssh/agent.sock"
 
-  WIN_NPIPERELAY=$(cmd.exe /c "where npiperelay.exe" 2>/dev/null | \
-    tr -d '\r' | \
-    grep -i "npiperelay.exe$" | \
-    head -n 1)
+  # cmd.exe /c "where" só enxerga o PATH do sistema (HKLM), não o do usuário (HKCU).
+  # Por isso usamos powershell.exe com caminho completo para buscar direto
+  # na pasta de pacotes do WinGet, sem depender de PATH.
+  _PS="/mnt/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe"
+  WIN_NPIPERELAY=$("$_PS" -NoProfile -NonInteractive -c \
+    "Get-ChildItem \"\$env:LOCALAPPDATA\Microsoft\WinGet\Packages\" \
+      -Recurse -Filter npiperelay.exe -ErrorAction SilentlyContinue \
+      | Where-Object { \$_.Length -gt 0 } \
+      | Select-Object -First 1 -ExpandProperty FullName" \
+    2>/dev/null | tr -d '\r')
+  unset _PS
 
   if [ -n "$WIN_NPIPERELAY" ]; then
     NPIPERELAY=$(wslpath -u "$WIN_NPIPERELAY")

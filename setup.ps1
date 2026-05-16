@@ -311,8 +311,9 @@ if (Step-Skip "npipe") { Write-Ok "npiperelay — etapa já concluída" }
 else {
     Install-WingetPkg "jstarks.npiperelay" "npiperelay"
 
-    $npipe = Get-ChildItem "$env:LOCALAPPDATA\Microsoft\WinGet\Packages\jstarks.npiperelay*" `
-        -Recurse -Filter "npiperelay.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
+    $npipe = Get-ChildItem "$env:LOCALAPPDATA\Microsoft\WinGet\Packages" `
+        -Recurse -Filter "npiperelay.exe" -ErrorAction SilentlyContinue |
+        Where-Object { $_.Length -gt 0 } | Select-Object -First 1
     if ($npipe) {
         Copy-Item $npipe.FullName "$env:LOCALAPPDATA\Microsoft\WindowsApps\npiperelay.exe" -Force
         Write-Ok "npiperelay copiado para WindowsApps"
