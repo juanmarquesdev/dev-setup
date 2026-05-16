@@ -3,6 +3,7 @@
 .SYNOPSIS
     Dev environment setup — Windows + WSL Arch Linux.
     Orquestra todo o processo: Windows, Arch root e Arch user setup.
+    Suporta retomada automática após reboot via Scheduled Task.
 
 .USAGE
     # Execute como Administrador:
@@ -13,18 +14,10 @@
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
-# ════════════════════════════════════════════════════════════════════════════
-#  CONFIGURAÇÃO — edite antes de executar
-# ════════════════════════════════════════════════════════════════════════════
-$Config = @{
-    WslDistro      = "archlinux"
-    WslUser        = "jrbmx"
-    GitName        = "juanmarquesdev"
-    GitEmail       = "juanbatistamarques+github@gmail.com"
-    DotfilesRepo   = "git@github.com:juanmarquesdev/dotfiles.git"
-    DotfilesPkgs   = "zsh git tmux ssh"
-}
-# ════════════════════════════════════════════════════════════════════════════
+# ─── Estado / Resume ────────────────────────────────────────────────────────
+$StateDir  = "$env:APPDATA\dev-setup"
+$StateFile = "$StateDir\state.json"
+$TaskName  = "DevSetupResume"
 
 # ─── Helpers ────────────────────────────────────────────────────────────────
 function Write-Title {
@@ -41,7 +34,6 @@ function Write-Step  { param($n, $total, $msg) Write-Host "  [$n/$total] $msg" -
 function Write-Ok    { param($msg) Write-Host "  ✔  $msg" -ForegroundColor Green }
 function Write-Warn  { param($msg) Write-Host "  ⚠  $msg" -ForegroundColor Yellow }
 function Write-Info  { param($msg) Write-Host "     $msg" -ForegroundColor Gray }
-function Write-Pause { param($msg) Write-Host "`n  ⏸  $msg" -ForegroundColor Yellow; Read-Host "     Pressione Enter para continuar" }
 
 function Test-WingetPkg {
     param($id)
@@ -60,164 +52,345 @@ function Install-WingetPkg {
     Write-Ok "$name instalado"
 }
 
+function Save-State {
+    New-Item -ItemType Directory -Path $StateDir -Force | Out-Null
+    $script:State | ConvertTo-Json -Depth 5 | Set-Content $StateFile -Encoding UTF8
+}
+
+function Step-Done {
+    param([string]$name)
+    if ($script:State.Done -notcontains $name) {
+        $script:State.Done = @($script:State.Done) + $name
+        Save-State
+    }
+}
+
+function Step-Skip {
+    param([string]$name)
+    return $script:State.Done -contains $name
+}
+
+function Register-ResumeTask {
+    $action    = New-ScheduledTaskAction -Execute "pwsh.exe" `
+        -Argument "-NoProfile -ExecutionPolicy Bypass -File `"$($script:State.ScriptPath)`""
+    $trigger   = New-ScheduledTaskTrigger -AtLogOn
+    $principal = New-ScheduledTaskPrincipal -UserId $env:USERNAME -RunLevel Highest
+    Register-ScheduledTask -TaskName $TaskName -Action $action `
+        -Trigger $trigger -Principal $principal -Force | Out-Null
+}
+
+function Unregister-ResumeTask {
+    Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false -ErrorAction SilentlyContinue
+}
+
+function Ask-Reboot {
+    param([string]$reason)
+    Write-Host ""
+    Write-Warn $reason
+    Write-Host ""
+    $ans = Read-Host "  Deseja reiniciar agora? (s/n)"
+    if ($ans -match "^[sS]") {
+        Register-ResumeTask
+        Write-Ok "Setup agendado para continuar automaticamente após o login"
+        Write-Info "Reiniciando em 5 segundos..."
+        Start-Sleep 5
+        Restart-Computer -Force
+        exit
+    }
+    Write-Warn "Execute o script novamente após reiniciar para continuar"
+    exit
+}
+
+function Test-RebootPending {
+    $keys = @(
+        "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Component Based Servicing\RebootPending",
+        "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\WindowsUpdate\Auto Update\RebootRequired"
+    )
+    foreach ($k in $keys) { if (Test-Path $k) { return $true } }
+    try {
+        $p = Get-ItemProperty "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager" `
+            -Name "PendingFileRenameOperations" -ErrorAction Stop
+        if ($p) { return $true }
+    } catch {}
+    return $false
+}
+
 # ════════════════════════════════════════════════════════════════════════════
-Write-Title "Dev Environment Setup"
-Write-Info "Distro  : $($Config.WslDistro)"
-Write-Info "Usuário : $($Config.WslUser)"
-Write-Info "Git     : $($Config.GitName) <$($Config.GitEmail)>"
-Write-Info "Dotfiles: $($Config.DotfilesRepo)"
-Write-Host ""
+#  Carregar estado existente ou perguntar parâmetros
+# ════════════════════════════════════════════════════════════════════════════
+if (Test-Path $StateFile) {
+    # ─── Retomada após reboot ────────────────────────────────────────────────
+    Write-Title "Retomando Setup"
+    $loaded = Get-Content $StateFile -Raw | ConvertFrom-Json
 
-# Senha do usuário WSL
-$securePass = Read-Host "  Senha para o usuário '$($Config.WslUser)' no WSL" -AsSecureString
-$plainPass  = [Runtime.InteropServices.Marshal]::PtrToStringAuto(
-                [Runtime.InteropServices.Marshal]::SecureStringToBSTR($securePass))
+    $script:State = @{
+        ScriptPath = $loaded.ScriptPath
+        EncPass    = $loaded.EncPass
+        Done       = @($loaded.Done)
+        Config     = $loaded.Config
+    }
 
-Write-Host ""
+    # Descriptografar senha (DPAPI — só funciona na mesma máquina/usuário)
+    $plainPass = [Runtime.InteropServices.Marshal]::PtrToStringAuto(
+                    [Runtime.InteropServices.Marshal]::SecureStringToBSTR(
+                        ($script:State.EncPass | ConvertTo-SecureString)))
+
+    Unregister-ResumeTask
+
+    $Config = $script:State.Config
+    Write-Info "Etapas já concluídas: $(if ($script:State.Done) { $script:State.Done -join ', ' } else { '(nenhuma)' })"
+    Write-Host ""
+
+} else {
+    # ─── Primeira execução: perguntar parâmetros ─────────────────────────────
+    Write-Title "Dev Environment Setup"
+    Write-Info "Responda as perguntas abaixo para configurar o setup:"
+    Write-Host ""
+
+    $in = (Read-Host "  Distro WSL [archlinux]").Trim()
+    $wslDistro = if ($in) { $in } else { "archlinux" }
+
+    $wslUser = ""
+    while (-not $wslUser) {
+        $wslUser = (Read-Host "  Usuário Linux (obrigatório)").Trim()
+    }
+
+    $gitName = ""
+    while (-not $gitName) {
+        $gitName = (Read-Host "  Nome Git (obrigatório)").Trim()
+    }
+
+    $gitEmail = ""
+    while (-not $gitEmail) {
+        $gitEmail = (Read-Host "  Email Git (obrigatório)").Trim()
+    }
+
+    $in = (Read-Host "  Dotfiles repo [git@github.com:$wslUser/dotfiles.git]").Trim()
+    $dotfilesRepo = if ($in) { $in } else { "git@github.com:$wslUser/dotfiles.git" }
+
+    $in = (Read-Host "  Dotfiles pacotes [zsh git tmux ssh]").Trim()
+    $dotfilesPkgs = if ($in) { $in } else { "zsh git tmux ssh" }
+
+    Write-Host ""
+    $securePass = Read-Host "  Senha para '$wslUser' no WSL" -AsSecureString
+    $plainPass  = [Runtime.InteropServices.Marshal]::PtrToStringAuto(
+                    [Runtime.InteropServices.Marshal]::SecureStringToBSTR($securePass))
+
+    $script:State = @{
+        ScriptPath = $PSCommandPath
+        EncPass    = ($securePass | ConvertFrom-SecureString)
+        Done       = @()
+        Config     = [PSCustomObject]@{
+            WslDistro    = $wslDistro
+            WslUser      = $wslUser
+            GitName      = $gitName
+            GitEmail     = $gitEmail
+            DotfilesRepo = $dotfilesRepo
+            DotfilesPkgs = $dotfilesPkgs
+        }
+    }
+    Save-State
+
+    $Config = $script:State.Config
+
+    Write-Host ""
+    Write-Info "Distro  : $($Config.WslDistro)"
+    Write-Info "Usuário : $($Config.WslUser)"
+    Write-Info "Git     : $($Config.GitName) <$($Config.GitEmail)>"
+    Write-Info "Dotfiles: $($Config.DotfilesRepo)"
+    Write-Host ""
+}
+
+# ════════════════════════════════════════════════════════════════════════════
+Write-Title "Windows Setup"
 
 # ────────────────────────────────────────────────────────────────────────────
 #  1. PowerShell 7
 # ────────────────────────────────────────────────────────────────────────────
 Write-Step 1 6 "PowerShell 7"
-Install-WingetPkg "Microsoft.PowerShell" "PowerShell 7"
+if (Step-Skip "ps7") { Write-Ok "PowerShell 7 — etapa já concluída" }
+else {
+    Install-WingetPkg "Microsoft.PowerShell" "PowerShell 7"
+    Step-Done "ps7"
+}
 
 # ────────────────────────────────────────────────────────────────────────────
 #  2. CaskaydiaMono Nerd Font
 # ────────────────────────────────────────────────────────────────────────────
 Write-Step 2 6 "CaskaydiaMono Nerd Font"
+if (Step-Skip "font") { Write-Ok "Nerd Font — etapa já concluída" }
+else {
+    $regFonts   = "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Fonts"
+    $fontNames  = (Get-ItemProperty $regFonts).PSObject.Properties.Name
+    $fontExists = $fontNames -match "CaskaydiaMono"
 
-$regFonts   = "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Fonts"
-$fontNames  = (Get-ItemProperty $regFonts).PSObject.Properties.Name
-$fontExists = $fontNames -match "CaskaydiaMono"
-
-if ($fontExists) {
-    Write-Ok "CaskaydiaMono Nerd Font já instalada"
-} else {
-    $tmpZip = "$env:TEMP\CascadiaMono.zip"
-    $tmpDir = "$env:TEMP\CascadiaMono"
-    Write-Info "Baixando fonte..."
-    Invoke-WebRequest -Uri "https://github.com/ryanoasis/nerd-fonts/releases/latest/download/CascadiaMono.zip" `
-        -OutFile $tmpZip -UseBasicParsing
-    if (Test-Path $tmpDir) { Remove-Item $tmpDir -Recurse -Force }
-    Expand-Archive $tmpZip -DestinationPath $tmpDir
-
-    $fontsFolder = "$env:WINDIR\Fonts"
-    Get-ChildItem $tmpDir -Filter "*NF*.ttf" | ForEach-Object {
-        Copy-Item $_.FullName $fontsFolder -Force
-        New-ItemProperty -Path $regFonts -Name "$($_.BaseName) (TrueType)" `
-            -Value $_.Name -PropertyType String -Force | Out-Null
-    }
-    Remove-Item $tmpZip, $tmpDir -Recurse -Force -ErrorAction SilentlyContinue
-    Write-Ok "Fonte instalada"
-}
-
-# ────────────────────────────────────────────────────────────────────────────
-#  3. WSL + Arch Linux
-# ────────────────────────────────────────────────────────────────────────────
-Write-Step 3 6 "WSL + Arch Linux"
-
-$distros = wsl --list --quiet 2>&1
-if ($distros -match $Config.WslDistro) {
-    Write-Ok "Arch Linux já instalado"
-} else {
-    Write-Info "Instalando WSL e Arch Linux..."
-    wsl --install --no-distribution
-    wsl --install $Config.WslDistro
-    Write-Ok "Arch Linux instalado"
-    Write-Warn "Se for a primeira instalação do WSL, pode ser necessário reiniciar o PC"
-    Write-Pause "Reinicie se solicitado e execute o script novamente"
-}
-
-# ────────────────────────────────────────────────────────────────────────────
-#  4. npiperelay (SSH bridge)
-# ────────────────────────────────────────────────────────────────────────────
-Write-Step 4 6 "npiperelay"
-Install-WingetPkg "albertony.npiperelay" "npiperelay"
-
-$npipe = Get-ChildItem "$env:LOCALAPPDATA\Microsoft\WinGet\Packages\albertony.npiperelay*" `
-    -Recurse -Filter "npiperelay.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
-if ($npipe) {
-    Copy-Item $npipe.FullName "$env:LOCALAPPDATA\Microsoft\WindowsApps\npiperelay.exe" -Force
-    Write-Ok "npiperelay copiado para WindowsApps"
-} else {
-    Write-Warn "npiperelay.exe não localizado — copie manualmente para %LOCALAPPDATA%\Microsoft\WindowsApps\"
-}
-
-# ────────────────────────────────────────────────────────────────────────────
-#  5. SSH Agent do Windows (desativar — Bitwarden vai assumir)
-# ────────────────────────────────────────────────────────────────────────────
-Write-Step 5 6 "Desativando Windows ssh-agent"
-
-$svc = Get-Service -Name "ssh-agent" -ErrorAction SilentlyContinue
-if ($svc) {
-    if ($svc.Status -eq "Running") { Stop-Service "ssh-agent" -Force }
-    Set-Service "ssh-agent" -StartupType Disabled
-    Write-Ok "ssh-agent desativado"
-} else {
-    Write-Ok "ssh-agent não encontrado (ok)"
-}
-
-# ────────────────────────────────────────────────────────────────────────────
-#  6. Windows Terminal — Catppuccin Mocha
-# ────────────────────────────────────────────────────────────────────────────
-Write-Step 6 6 "Windows Terminal — Catppuccin Mocha"
-
-$wtPaths = @(
-    "$env:LOCALAPPDATA\Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe\LocalState\settings.json",
-    "$env:LOCALAPPDATA\Microsoft\Windows Terminal\settings.json"
-)
-$settingsPath = $wtPaths | Where-Object { Test-Path $_ } | Select-Object -First 1
-
-if (-not $settingsPath) {
-    Write-Warn "settings.json do Windows Terminal não encontrado — configure manualmente"
-} else {
-    $json = Get-Content $settingsPath -Raw | ConvertFrom-Json
-
-    # Adicionar esquema Catppuccin Mocha
-    $scheme = [PSCustomObject]@{
-        name              = "Catppuccin Mocha"
-        background        = "#1E1E2E"; foreground   = "#CDD6F4"
-        cursorColor       = "#F5E0DC"; selectionBackground = "#585B70"
-        black             = "#45475A"; brightBlack  = "#585B70"
-        red               = "#F38BA8"; brightRed    = "#F38BA8"
-        green             = "#A6E3A1"; brightGreen  = "#A6E3A1"
-        yellow            = "#F9E2AF"; brightYellow = "#F9E2AF"
-        blue              = "#89B4FA"; brightBlue   = "#89B4FA"
-        purple            = "#F5C2E7"; brightPurple = "#F5C2E7"
-        cyan              = "#94E2D5"; brightCyan   = "#94E2D5"
-        white             = "#BAC2DE"; brightWhite  = "#A6ADC8"
-    }
-
-    if (-not ($json.schemes | Where-Object { $_.name -eq "Catppuccin Mocha" })) {
-        $json.schemes += $scheme
-        Write-Info "Esquema Catppuccin Mocha adicionado"
-    }
-
-    # Atualizar perfil Arch
-    $archProfile = $json.profiles.list | Where-Object {
-        $_.name -match "arch" -or $_.source -match "arch"
-    } | Select-Object -First 1
-
-    if ($archProfile) {
-        $archProfile | Add-Member -NotePropertyName "colorScheme"           -NotePropertyValue "Catppuccin Mocha" -Force
-        $archProfile | Add-Member -NotePropertyName "suppressApplicationTitle" -NotePropertyValue $true -Force
-        $archProfile | Add-Member -NotePropertyName "tabTitle"              -NotePropertyValue "Arch" -Force
-        $archProfile | Add-Member -NotePropertyName "opacity"               -NotePropertyValue 95 -Force
-
-        if (-not $archProfile.PSObject.Properties["font"]) {
-            $archProfile | Add-Member -NotePropertyName "font" -NotePropertyValue ([PSCustomObject]@{ face = "CaskaydiaMono Nerd Font" }) -Force
-        } else {
-            $archProfile.font | Add-Member -NotePropertyName "face" -NotePropertyValue "CaskaydiaMono Nerd Font" -Force
-        }
-        Write-Info "Perfil Arch atualizado"
+    if ($fontExists) {
+        Write-Ok "CaskaydiaMono Nerd Font já instalada"
     } else {
-        Write-Warn "Perfil Arch não encontrado no Terminal — abra o Arch uma vez e execute: .\fix-terminal.ps1"
-    }
+        $tmpZip = "$env:TEMP\CascadiaMono.zip"
+        $tmpDir = "$env:TEMP\CascadiaMono"
+        Write-Info "Baixando fonte..."
+        Invoke-WebRequest -Uri "https://github.com/ryanoasis/nerd-fonts/releases/latest/download/CascadiaMono.zip" `
+            -OutFile $tmpZip -UseBasicParsing
+        if (Test-Path $tmpDir) { Remove-Item $tmpDir -Recurse -Force }
+        Expand-Archive $tmpZip -DestinationPath $tmpDir
 
-    # Backup + salvar
-    Copy-Item $settingsPath "$settingsPath.bak" -Force
-    $json | ConvertTo-Json -Depth 20 | Set-Content $settingsPath -Encoding UTF8
-    Write-Ok "Windows Terminal configurado"
+        $fontsFolder = "$env:WINDIR\Fonts"
+        Get-ChildItem $tmpDir -Filter "*NF*.ttf" | ForEach-Object {
+            Copy-Item $_.FullName $fontsFolder -Force
+            New-ItemProperty -Path $regFonts -Name "$($_.BaseName) (TrueType)" `
+                -Value $_.Name -PropertyType String -Force | Out-Null
+        }
+        Remove-Item $tmpZip, $tmpDir -Recurse -Force -ErrorAction SilentlyContinue
+        Write-Ok "Fonte instalada"
+    }
+    Step-Done "font"
+}
+
+# ────────────────────────────────────────────────────────────────────────────
+#  3a. WSL — habilitar features Windows
+# ────────────────────────────────────────────────────────────────────────────
+Write-Step 3 7 "WSL — features Windows"
+if (Step-Skip "wsl-features") { Write-Ok "WSL features — etapa já concluída" }
+else {
+    $wslStatus = wsl --status 2>&1
+    $featuresEnabled = ($wslStatus -match "Versão padrão" -or $wslStatus -match "Default Version" -or $wslStatus -match "WSL 2")
+
+    if ($featuresEnabled) {
+        Write-Ok "Features WSL já habilitadas"
+    } else {
+        Write-Info "Habilitando features WSL (VirtualMachinePlatform + WSL)..."
+        wsl --install --no-distribution
+        # wsl --install --no-distribution usa DISM/CBS, que escreve em
+        # Component Based Servicing\RebootPending quando é a primeira vez.
+        Write-Ok "Features habilitadas"
+    }
+    Step-Done "wsl-features"
+
+    # Verificar reboot via CBS (funciona porque DISM escreve nessa chave)
+    if (Test-RebootPending) {
+        Ask-Reboot "As features do WSL foram habilitadas e requerem reinicialização para continuar."
+    }
+}
+
+# ────────────────────────────────────────────────────────────────────────────
+#  3b. WSL — instalar distro
+# ────────────────────────────────────────────────────────────────────────────
+Write-Step 4 7 "WSL — instalar $($Config.WslDistro)"
+if (Step-Skip "wsl-distro") { Write-Ok "Distro WSL — etapa já concluída" }
+else {
+    $distros = wsl --list --quiet 2>&1
+    if ($distros -match $Config.WslDistro) {
+        Write-Ok "$($Config.WslDistro) já instalado"
+    } else {
+        Write-Info "Instalando $($Config.WslDistro)..."
+        wsl --install $Config.WslDistro
+        # Instalar distro não exige reboot do Windows — é apenas extração de tarball
+        Write-Ok "$($Config.WslDistro) instalado"
+    }
+    Step-Done "wsl-distro"
+}
+
+# ────────────────────────────────────────────────────────────────────────────
+#  5. npiperelay (SSH bridge)
+# ────────────────────────────────────────────────────────────────────────────
+Write-Step 5 7 "npiperelay"
+if (Step-Skip "npipe") { Write-Ok "npiperelay — etapa já concluída" }
+else {
+    Install-WingetPkg "albertony.npiperelay" "npiperelay"
+
+    $npipe = Get-ChildItem "$env:LOCALAPPDATA\Microsoft\WinGet\Packages\albertony.npiperelay*" `
+        -Recurse -Filter "npiperelay.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($npipe) {
+        Copy-Item $npipe.FullName "$env:LOCALAPPDATA\Microsoft\WindowsApps\npiperelay.exe" -Force
+        Write-Ok "npiperelay copiado para WindowsApps"
+    } else {
+        Write-Warn "npiperelay.exe não localizado — copie manualmente para %LOCALAPPDATA%\Microsoft\WindowsApps\"
+    }
+    Step-Done "npipe"
+}
+
+# ────────────────────────────────────────────────────────────────────────────
+#  6. SSH Agent do Windows (desativar — Bitwarden vai assumir)
+# ────────────────────────────────────────────────────────────────────────────
+Write-Step 6 7 "Desativando Windows ssh-agent"
+if (Step-Skip "sshagent") { Write-Ok "ssh-agent — etapa já concluída" }
+else {
+    $svc = Get-Service -Name "ssh-agent" -ErrorAction SilentlyContinue
+    if ($svc) {
+        if ($svc.Status -eq "Running") { Stop-Service "ssh-agent" -Force }
+        Set-Service "ssh-agent" -StartupType Disabled
+        Write-Ok "ssh-agent desativado"
+    } else {
+        Write-Ok "ssh-agent não encontrado (ok)"
+    }
+    Step-Done "sshagent"
+}
+
+# ────────────────────────────────────────────────────────────────────────────
+#  7. Windows Terminal — Catppuccin Mocha
+# ────────────────────────────────────────────────────────────────────────────
+Write-Step 7 7 "Windows Terminal — Catppuccin Mocha"
+if (Step-Skip "terminal") { Write-Ok "Windows Terminal — etapa já concluída" }
+else {
+    $wtPaths = @(
+        "$env:LOCALAPPDATA\Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe\LocalState\settings.json",
+        "$env:LOCALAPPDATA\Microsoft\Windows Terminal\settings.json"
+    )
+    $settingsPath = $wtPaths | Where-Object { Test-Path $_ } | Select-Object -First 1
+
+    if (-not $settingsPath) {
+        Write-Warn "settings.json do Windows Terminal não encontrado — configure manualmente"
+    } else {
+        $json = Get-Content $settingsPath -Raw | ConvertFrom-Json
+
+        # Adicionar esquema Catppuccin Mocha
+        $scheme = [PSCustomObject]@{
+            name              = "Catppuccin Mocha"
+            background        = "#1E1E2E"; foreground   = "#CDD6F4"
+            cursorColor       = "#F5E0DC"; selectionBackground = "#585B70"
+            black             = "#45475A"; brightBlack  = "#585B70"
+            red               = "#F38BA8"; brightRed    = "#F38BA8"
+            green             = "#A6E3A1"; brightGreen  = "#A6E3A1"
+            yellow            = "#F9E2AF"; brightYellow = "#F9E2AF"
+            blue              = "#89B4FA"; brightBlue   = "#89B4FA"
+            purple            = "#F5C2E7"; brightPurple = "#F5C2E7"
+            cyan              = "#94E2D5"; brightCyan   = "#94E2D5"
+            white             = "#BAC2DE"; brightWhite  = "#A6ADC8"
+        }
+
+        if (-not ($json.schemes | Where-Object { $_.name -eq "Catppuccin Mocha" })) {
+            $json.schemes += $scheme
+            Write-Info "Esquema Catppuccin Mocha adicionado"
+        }
+
+        # Atualizar perfil Arch
+        $archProfile = $json.profiles.list | Where-Object {
+            $_.name -match "arch" -or $_.source -match "arch"
+        } | Select-Object -First 1
+
+        if ($archProfile) {
+            $archProfile | Add-Member -NotePropertyName "colorScheme"              -NotePropertyValue "Catppuccin Mocha" -Force
+            $archProfile | Add-Member -NotePropertyName "suppressApplicationTitle" -NotePropertyValue $true -Force
+            $archProfile | Add-Member -NotePropertyName "tabTitle"                 -NotePropertyValue "Arch" -Force
+            $archProfile | Add-Member -NotePropertyName "opacity"                  -NotePropertyValue 95 -Force
+
+            if (-not $archProfile.PSObject.Properties["font"]) {
+                $archProfile | Add-Member -NotePropertyName "font" -NotePropertyValue ([PSCustomObject]@{ face = "CaskaydiaMono Nerd Font" }) -Force
+            } else {
+                $archProfile.font | Add-Member -NotePropertyName "face" -NotePropertyValue "CaskaydiaMono Nerd Font" -Force
+            }
+            Write-Info "Perfil Arch atualizado"
+        } else {
+            Write-Warn "Perfil Arch não encontrado no Terminal — abra o Arch uma vez e execute: .\fix-terminal.ps1"
+        }
+
+        # Backup + salvar
+        Copy-Item $settingsPath "$settingsPath.bak" -Force
+        $json | ConvertTo-Json -Depth 20 | Set-Content $settingsPath -Encoding UTF8
+        Write-Ok "Windows Terminal configurado"
+    }
+    Step-Done "terminal"
 }
 
 # ════════════════════════════════════════════════════════════════════════════
@@ -225,15 +398,17 @@ if (-not $settingsPath) {
 # ════════════════════════════════════════════════════════════════════════════
 Write-Title "Arch Linux — Root Setup"
 
-# Copiar scripts para diretório acessível pelo WSL
-$tmpSetup   = "$env:TEMP\dev-setup"
-$wslTmpPath = "/mnt/c" + ($tmpSetup.Substring(2) -replace "\\", "/")
+if (Step-Skip "arch-root") { Write-Ok "Root setup — etapa já concluída" }
+else {
+    # Copiar scripts para diretório acessível pelo WSL
+    $tmpSetup   = "$env:TEMP\dev-setup"
+    $wslTmpPath = "/mnt/c" + ($tmpSetup.Substring(2) -replace "\\", "/")
 
-New-Item -ItemType Directory -Path $tmpSetup -Force | Out-Null
-Copy-Item "$PSScriptRoot\arch\*" $tmpSetup -Recurse -Force
+    New-Item -ItemType Directory -Path $tmpSetup -Force | Out-Null
+    Copy-Item "$PSScriptRoot\arch\*" $tmpSetup -Recurse -Force
 
-# Gerar config.env para os scripts Arch
-$configEnv = @"
+    # Gerar config.env para os scripts Arch
+    $configEnv = @"
 SETUP_USER="$($Config.WslUser)"
 SETUP_USER_PASS="$plainPass"
 SETUP_GIT_NAME="$($Config.GitName)"
@@ -241,29 +416,61 @@ SETUP_GIT_EMAIL="$($Config.GitEmail)"
 SETUP_DOTFILES_REPO="$($Config.DotfilesRepo)"
 SETUP_DOTFILES_PKGS="$($Config.DotfilesPkgs)"
 "@
-Set-Content "$tmpSetup\config.env" -Value $configEnv -Encoding UTF8 -NoNewline
+    Set-Content "$tmpSetup\config.env" -Value $configEnv -Encoding UTF8 -NoNewline
 
-Write-Info "Executando 01-root.sh em $($Config.WslDistro)..."
-Write-Host ""
+    Write-Info "Executando 01-root.sh em $($Config.WslDistro)..."
+    Write-Host ""
 
-wsl -d $Config.WslDistro -u root -- bash "$wslTmpPath/01-root.sh" "$wslTmpPath"
+    wsl -d $Config.WslDistro -u root -- bash "$wslTmpPath/01-root.sh" "$wslTmpPath"
 
-Write-Host ""
-Write-Info "Reiniciando WSL..."
-wsl --shutdown
-Start-Sleep -Seconds 3
+    Write-Host ""
+    Write-Info "Reiniciando WSL..."
+    wsl --shutdown
+    Start-Sleep -Seconds 3
+
+    Step-Done "arch-root"
+}
 
 # ════════════════════════════════════════════════════════════════════════════
 #  Arch Linux — User Setup
 # ════════════════════════════════════════════════════════════════════════════
 Write-Title "Arch Linux — User Setup"
-Write-Info "Executando 02-user.sh como '$($Config.WslUser)'..."
-Write-Host ""
 
-wsl -d $Config.WslDistro -u $Config.WslUser -- bash "$wslTmpPath/02-user.sh" "$wslTmpPath"
+if (Step-Skip "arch-user") { Write-Ok "User setup — etapa já concluída" }
+else {
+    $tmpSetup   = "$env:TEMP\dev-setup"
+    $wslTmpPath = "/mnt/c" + ($tmpSetup.Substring(2) -replace "\\", "/")
 
-# Limpar arquivos temporários (contém senha)
-Remove-Item $tmpSetup -Recurse -Force -ErrorAction SilentlyContinue
+    # Regenerar config.env caso o tmp tenha sido limpo
+    if (-not (Test-Path "$tmpSetup\config.env")) {
+        New-Item -ItemType Directory -Path $tmpSetup -Force | Out-Null
+        Copy-Item "$PSScriptRoot\arch\*" $tmpSetup -Recurse -Force
+        $configEnv = @"
+SETUP_USER="$($Config.WslUser)"
+SETUP_USER_PASS="$plainPass"
+SETUP_GIT_NAME="$($Config.GitName)"
+SETUP_GIT_EMAIL="$($Config.GitEmail)"
+SETUP_DOTFILES_REPO="$($Config.DotfilesRepo)"
+SETUP_DOTFILES_PKGS="$($Config.DotfilesPkgs)"
+"@
+        Set-Content "$tmpSetup\config.env" -Value $configEnv -Encoding UTF8 -NoNewline
+    }
+
+    Write-Info "Executando 02-user.sh como '$($Config.WslUser)'..."
+    Write-Host ""
+
+    wsl -d $Config.WslDistro -u $Config.WslUser -- bash "$wslTmpPath/02-user.sh" "$wslTmpPath"
+
+    # Limpar arquivos temporários (contém senha)
+    Remove-Item $tmpSetup -Recurse -Force -ErrorAction SilentlyContinue
+
+    Step-Done "arch-user"
+}
+
+# ─── Limpeza do estado ───────────────────────────────────────────────────────
+Remove-Item $StateFile -Force -ErrorAction SilentlyContinue
+Remove-Item $StateDir  -Force -ErrorAction SilentlyContinue
+Unregister-ResumeTask
 
 # ════════════════════════════════════════════════════════════════════════════
 Write-Title "Setup Concluído!"
