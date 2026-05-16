@@ -242,7 +242,8 @@ if (Step-Skip "font") { Write-Ok "Nerd Font — etapa já concluída" }
 else {
     $regFonts   = "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Fonts"
     $fontNames  = (Get-ItemProperty $regFonts).PSObject.Properties.Name
-    $fontExists = $fontNames -match "CaskaydiaMonoNerdFont"
+    $fontExists = (Get-ChildItem "$env:WINDIR\Fonts" -Filter "CaskaydiaMonoNerdFont*.ttf" `
+                      -ErrorAction SilentlyContinue).Count -gt 0
 
     if ($fontExists) {
         Write-Ok "CaskaydiaMono Nerd Font já instalada"
