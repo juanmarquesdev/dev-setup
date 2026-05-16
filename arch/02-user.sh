@@ -216,8 +216,40 @@ ok "Git configurado: $SETUP_GIT_NAME <$SETUP_GIT_EMAIL>"
 # ─── 7. Git SSH signing ─────────────────────────────────────────────────────
 step "[8/9] Git — SSH signing"
 
-# Verifica se a chave pública existe (via dotfiles ou diretamente)
-SSH_SIGNING_KEY="$HOME/.ssh/pessoal.pub"
+# Permite escolher interativamente uma chave pública para signing.
+# Também aceita override por variável de ambiente: SETUP_GIT_SIGNING_KEY.
+DEFAULT_SIGNING_KEY="$HOME/.ssh/pessoal.pub"
+SSH_SIGNING_KEY="${SETUP_GIT_SIGNING_KEY:-$DEFAULT_SIGNING_KEY}"
+
+if [[ ! -f "$SSH_SIGNING_KEY" ]]; then
+    mapfile -t SSH_PUBLIC_KEYS < <(find "$HOME/.ssh" -maxdepth 1 -type f -name "*.pub" | sort)
+
+    if (( ${#SSH_PUBLIC_KEYS[@]} > 0 )); then
+        if [[ -t 0 ]]; then
+            info "Escolha a chave pública para assinatura SSH do Git:"
+
+            default_idx=1
+            for i in "${!SSH_PUBLIC_KEYS[@]}"; do
+                idx=$((i + 1))
+                [[ "${SSH_PUBLIC_KEYS[$i]}" == "$DEFAULT_SIGNING_KEY" ]] && default_idx=$idx
+                info "  [$idx] ${SSH_PUBLIC_KEYS[$i]}"
+            done
+
+            read -r -p "Opção [$default_idx]: " key_choice
+            key_choice=${key_choice:-$default_idx}
+
+            if [[ "$key_choice" =~ ^[0-9]+$ ]] && (( key_choice >= 1 && key_choice <= ${#SSH_PUBLIC_KEYS[@]} )); then
+                SSH_SIGNING_KEY="${SSH_PUBLIC_KEYS[$((key_choice - 1))]}"
+            else
+                warn "Opção inválida; usando padrão detectado"
+                SSH_SIGNING_KEY="${SSH_PUBLIC_KEYS[$((default_idx - 1))]}"
+            fi
+        else
+            SSH_SIGNING_KEY="${SSH_PUBLIC_KEYS[0]}"
+            info "Sem TTY interativo; usando chave detectada: $SSH_SIGNING_KEY"
+        fi
+    fi
+fi
 
 if [[ -f "$SSH_SIGNING_KEY" ]]; then
     PUBKEY=$(cat "$SSH_SIGNING_KEY")
@@ -267,5 +299,5 @@ echo -e "${GRAY}     Depois: mv ~/.p10k.zsh ~/dotfiles/zsh/ && cd ~/dotfiles && 
 echo ""
 echo -e "${CYAN}  3. Chave de assinatura no GitHub${NC}"
 echo -e "${GRAY}     github.com/settings/keys → New SSH key → Signing Key${NC}"
-echo -e "${GRAY}     Cole: $(cat "$HOME/.ssh/pessoal.pub" 2>/dev/null || echo '~/.ssh/pessoal.pub')${NC}"
+echo -e "${GRAY}     Cole: $(cat "$SSH_SIGNING_KEY" 2>/dev/null || echo "$HOME/.ssh/pessoal.pub")${NC}"
 echo ""
