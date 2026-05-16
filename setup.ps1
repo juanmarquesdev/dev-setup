@@ -240,33 +240,18 @@ else {
 Write-Step 2 6 "CaskaydiaMono Nerd Font"
 if (Step-Skip "font") { Write-Ok "Nerd Font — etapa já concluída" }
 else {
-    $regFonts   = "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Fonts"
-    $fontNames  = (Get-ItemProperty $regFonts).PSObject.Properties.Name
-    $fontExists = @(Get-ChildItem "$env:WINDIR\Fonts" -Filter "CascaydiaMono NF*.ttf" `
-                      -ErrorAction SilentlyContinue).Count -gt 0
-
-    if ($fontExists) {
-        Write-Ok "CaskaydiaMono Nerd Font já instalada"
+    Write-Host ""
+    Write-Host "  Instale a CaskaydiaMono Nerd Font manualmente:" -ForegroundColor Yellow
+    Write-Host "  https://www.nerdfonts.com/font-downloads" -ForegroundColor Cyan
+    Write-Host ""
+    $confirm = Read-Host "  A fonte já está instalada? [s/N]"
+    if ($confirm -match "^[sS]$") {
+        Write-Ok "CaskaydiaMono Nerd Font confirmada"
+        Step-Done "font"
     } else {
-        $tmpZip = "$env:TEMP\CascadiaMono.zip"
-        $tmpDir = "$env:TEMP\CascadiaMono"
-        Write-Info "Baixando fonte..."
-        Invoke-WebRequest -Uri "https://github.com/ryanoasis/nerd-fonts/releases/latest/download/CascadiaMono.zip" `
-            -OutFile $tmpZip -UseBasicParsing
-        if (Test-Path $tmpDir) { Remove-Item $tmpDir -Recurse -Force }
-        Expand-Archive $tmpZip -DestinationPath $tmpDir
-
-        $shell = New-Object -ComObject Shell.Application
-        $fontsFolder = $shell.Namespace(0x14)   # ssfFONTS
-        Get-ChildItem $tmpDir -Filter "CascaydiaMono NF*.ttf" | ForEach-Object {
-            if (-not (Test-Path "$env:WINDIR\Fonts\$($_.Name)")) {
-                $fontsFolder.CopyHere($_.FullName, 0x10)
-            }
-        }
-        Remove-Item $tmpZip, $tmpDir -Recurse -Force -ErrorAction SilentlyContinue
-        Write-Ok "Fonte instalada"
+        Write-Warn "Instale a fonte e execute o script novamente para continuar."
+        exit 0
     }
-    Step-Done "font"
 }
 
 # ────────────────────────────────────────────────────────────────────────────
