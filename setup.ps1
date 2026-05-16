@@ -255,9 +255,13 @@ else {
 Write-Step 3 7 "WSL — features Windows"
 if (Step-Skip "wsl-features") { Write-Ok "WSL features — etapa já concluída" }
 else {
-    $wslStatus = wsl --status 2>&1
-    $featuresEnabled = ($LASTEXITCODE -eq 0) -and
-                       ($wslStatus -match "Versão padrão" -or $wslStatus -match "Default Version" -or $wslStatus -match "WSL 2")
+    try {
+        $wslStatus = wsl --status 2>&1
+        $featuresEnabled = ($LASTEXITCODE -eq 0) -and
+                           ($wslStatus -match "Versão padrão" -or $wslStatus -match "Default Version" -or $wslStatus -match "WSL 2")
+    } catch {
+        $featuresEnabled = $false
+    }
 
     if ($featuresEnabled) {
         Write-Ok "Features WSL já habilitadas"
