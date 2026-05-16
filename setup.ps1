@@ -242,7 +242,7 @@ if (Step-Skip "font") { Write-Ok "Nerd Font — etapa já concluída" }
 else {
     $regFonts   = "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Fonts"
     $fontNames  = (Get-ItemProperty $regFonts).PSObject.Properties.Name
-    $fontExists = $fontNames -match "CaskaydiaMono"
+    $fontExists = $fontNames -match "CaskaydiaMonoNerdFont"
 
     if ($fontExists) {
         Write-Ok "CaskaydiaMono Nerd Font já instalada"
@@ -255,11 +255,12 @@ else {
         if (Test-Path $tmpDir) { Remove-Item $tmpDir -Recurse -Force }
         Expand-Archive $tmpZip -DestinationPath $tmpDir
 
-        $fontsFolder = "$env:WINDIR\Fonts"
-        Get-ChildItem $tmpDir -Filter "*NF*.ttf" | ForEach-Object {
-            Copy-Item $_.FullName $fontsFolder -Force
-            New-ItemProperty -Path $regFonts -Name "$($_.BaseName) (TrueType)" `
-                -Value $_.Name -PropertyType String -Force | Out-Null
+        $shell = New-Object -ComObject Shell.Application
+        $fontsFolder = $shell.Namespace(0x14)   # ssfFONTS
+        Get-ChildItem $tmpDir -Filter "CaskaydiaMonoNerdFont*.ttf" | ForEach-Object {
+            if (-not (Test-Path "$env:WINDIR\Fonts\$($_.Name)")) {
+                $fontsFolder.CopyHere($_.FullName, 0x10)
+            }
         }
         Remove-Item $tmpZip, $tmpDir -Recurse -Force -ErrorAction SilentlyContinue
         Write-Ok "Fonte instalada"
@@ -494,6 +495,21 @@ SETUP_DOTFILES_PKGS="$($Config.DotfilesPkgs)"
         Set-Content "$tmpSetup\config.env" -Value $configEnv -Encoding UTF8 -NoNewline
         Convert-ToUnixLineEndings $tmpSetup
     }
+
+    Write-Host ""
+    Write-Warn "AÇÃO NECESSÁRIA antes de continuar:"
+    Write-Host "  1. Abra o Bitwarden Desktop e desbloqueie o cofre" -ForegroundColor White
+    Write-Host "  2. Confirme que Settings → SSH Agent está habilitado" -ForegroundColor White
+    Write-Host "  3. Num terminal WSL separado, inicie o socket manualmente:" -ForegroundColor White
+    Write-Host ""
+    Write-Host "       export SSH_AUTH_SOCK=`$HOME/.ssh/agent.sock" -ForegroundColor Cyan
+    Write-Host "       rm -f `$SSH_AUTH_SOCK" -ForegroundColor Cyan
+    Write-Host "       setsid socat UNIX-LISTEN:`$SSH_AUTH_SOCK,fork EXEC:`"npiperelay.exe -ei -s //./pipe/openssh-ssh-agent`" &" -ForegroundColor Cyan
+    Write-Host ""
+    Write-Host "  Sem o socket ativo o clone dos dotfiles irá travar." -ForegroundColor Gray
+    Write-Host ""
+    Read-Host "  Pressione Enter quando o socket estiver rodando"
+    Write-Host ""
 
     Write-Info "Executando 02-user.sh como '$($Config.WslUser)'..."
     Write-Host ""
