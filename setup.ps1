@@ -72,7 +72,8 @@ function Step-Skip {
 
 function Register-ResumeTask {
     # Resolve full path to pwsh.exe so the task works even when PATH is minimal at logon
-    $pwsh = (Get-Command pwsh -ErrorAction SilentlyContinue)?.Source
+    $pwshCmd = Get-Command pwsh -ErrorAction SilentlyContinue
+    $pwsh = if ($pwshCmd) { $pwshCmd.Source } else { $null }
     if (-not $pwsh) {
         $pwsh = "$env:ProgramFiles\PowerShell\7\pwsh.exe"
     }
