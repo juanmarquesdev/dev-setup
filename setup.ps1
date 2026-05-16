@@ -330,9 +330,20 @@ else {
 }
 
 # ────────────────────────────────────────────────────────────────────────────
-#  7. Windows Terminal — Catppuccin Mocha
+#  7. Desabilitar pesquisa web do menu Iniciar
 # ────────────────────────────────────────────────────────────────────────────
-Write-Step 7 7 "Windows Terminal — Catppuccin Mocha"
+Write-Step 7 8 "Desabilitar pesquisa web do menu Iniciar"
+if (Step-Skip "bingsearch") { Write-Ok "Pesquisa web do menu Iniciar — etapa já concluída" }
+else {
+    reg add HKCU\SOFTWARE\Microsoft\Windows\CurrentVersion\Search /V BingSearchEnabled /T REG_DWORD /D 0 /F | Out-Null
+    Write-Ok "Pesquisa web do menu Iniciar desabilitada"
+    Step-Done "bingsearch"
+}
+
+# ────────────────────────────────────────────────────────────────────────────
+#  8. Windows Terminal — Catppuccin Mocha
+# ────────────────────────────────────────────────────────────────────────────
+Write-Step 8 8 "Windows Terminal — Catppuccin Mocha"
 if (Step-Skip "terminal") { Write-Ok "Windows Terminal — etapa já concluída" }
 else {
     $wtPaths = @(

@@ -10,6 +10,7 @@ Automatiza a configuração de um ambiente de desenvolvimento completo em Window
 - WSL (features + distro Arch Linux)
 - `npiperelay` para ponte SSH do Bitwarden para o WSL
 - serviço `ssh-agent` do Windows desativado
+- pesquisa web do menu Iniciar desabilitada via `BingSearchEnabled=0`
 - Windows Terminal com esquema Catppuccin Mocha no perfil Arch
 
 ### Arch Linux (WSL)
@@ -63,7 +64,7 @@ O estado é salvo em `%APPDATA%\dev-setup\state.json` para retomada automática 
 
 ## Fluxo de execução
 
-1. Configuração de Windows (PowerShell, fonte, WSL, Terminal, npiperelay)
+1. Configuração de Windows (PowerShell, fonte, WSL, npiperelay, search web do Iniciar desabilitada, Terminal)
 2. Execução de `arch/01-root.sh` como root no Arch
 3. Reinício do WSL quando necessário
 4. Execução de `arch/02-user.sh` como usuário comum

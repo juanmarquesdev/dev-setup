@@ -93,6 +93,12 @@ Instale CaskaydiaMono Nerd Font:
 }
 ```
 
+### 3.4 Desabilitar pesquisa web do menu Iniciar
+
+```powershell
+reg add HKCU\SOFTWARE\Microsoft\Windows\CurrentVersion\Search /V BingSearchEnabled /T REG_DWORD /D 0 /F
+```
+
 ## 4. Arch Linux como root (primeira inicializacao)
 
 ### 4.1 Atualizar e instalar base
