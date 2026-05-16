@@ -1,0 +1,7 @@
+# Arquivos temporários gerados pelo setup
+arch/config.env
+*.bak
+
+# Windows
+Thumbs.db
+desktop.ini
