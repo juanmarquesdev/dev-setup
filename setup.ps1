@@ -496,24 +496,6 @@ SETUP_DOTFILES_PKGS="$($Config.DotfilesPkgs)"
         Convert-ToUnixLineEndings $tmpSetup
     }
 
-    Write-Host ""
-    Write-Warn "AÇÃO NECESSÁRIA antes de continuar:"
-    Write-Host "  1. Abra o Bitwarden Desktop e desbloqueie o cofre" -ForegroundColor White
-    Write-Host "  2. Confirme que Settings → SSH Agent está habilitado" -ForegroundColor White
-    Write-Host "  3. Num terminal WSL separado, inicie o socket manualmente:" -ForegroundColor White
-    Write-Host ""
-    Write-Host "       export SSH_AUTH_SOCK=`$HOME/.ssh/agent.sock" -ForegroundColor Cyan
-    Write-Host "       rm -f `$SSH_AUTH_SOCK" -ForegroundColor Cyan
-    Write-Host "       WIN_LOCAL=`$(cmd.exe /c 'echo %LOCALAPPDATA%' 2>/dev/null | tr -d '\r')" -ForegroundColor Cyan
-    Write-Host "       NPIPERELAY=`$(wslpath -u `"`${WIN_LOCAL}\\Microsoft\\WindowsApps\\npiperelay.exe`")" -ForegroundColor Cyan
-    Write-Host "       setsid socat UNIX-LISTEN:`$SSH_AUTH_SOCK,fork EXEC:`"\`"`$NPIPERELAY\`" -ei -s //./pipe/openssh-ssh-agent`" &" -ForegroundColor Cyan
-    Write-Host "       sleep 1 && ssh-add -l" -ForegroundColor Cyan
-    Write-Host ""
-    Write-Host "  Sem o socket ativo o clone dos dotfiles irá travar." -ForegroundColor Gray
-    Write-Host ""
-    Read-Host "  Pressione Enter quando o socket estiver rodando"
-    Write-Host ""
-
     Write-Info "Executando 02-user.sh como '$($Config.WslUser)'..."
     Write-Host ""
 

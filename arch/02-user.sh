@@ -162,24 +162,6 @@ if dir_exists "$HOME/dotfiles"; then
 else
     info "Clonando $SETUP_DOTFILES_REPO..."
 
-    # Iniciar bridge SSH (npiperelay) para poder usar chaves do Bitwarden
-    export SSH_AUTH_SOCK="$HOME/.ssh/agent.sock"
-    WIN_NPIPERELAY=$(cmd.exe /c 'where npiperelay.exe' 2>/dev/null | tr -d '\r' | grep -i 'npiperelay.exe$' | head -n 1 || true)
-
-    if [[ -n "$WIN_NPIPERELAY" ]]; then
-        NPIPERELAY=$(wslpath -u "$WIN_NPIPERELAY")
-        if ! ss -a | grep -q "$SSH_AUTH_SOCK"; then
-            rm -f "$SSH_AUTH_SOCK"
-            setsid socat UNIX-LISTEN:"$SSH_AUTH_SOCK",fork \
-                EXEC:"\"$NPIPERELAY\" -ei -s //./pipe/openssh-ssh-agent" \
-                >/dev/null 2>&1 &
-            sleep 2
-        fi
-        info "Agente SSH iniciado"
-    else
-        warn "npiperelay não encontrado — clone manualmente após configurar Bitwarden"
-    fi
-
     # Adicionar GitHub ao known_hosts silenciosamente
     mkdir -p "$HOME/.ssh"
     ssh-keyscan github.com >> "$HOME/.ssh/known_hosts" 2>/dev/null
