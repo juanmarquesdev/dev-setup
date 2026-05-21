@@ -17,7 +17,6 @@ Automatiza a configuração de um ambiente de desenvolvimento completo em Window
 - setup inicial como root (`01-root.sh`):
     - usuário com `wheel` + sudo sem senha
     - `/etc/wsl.conf` com `systemd=true` e usuário padrão
-    - correção de WSLInterop via `binfmt_misc`
     - locale `en_US.UTF-8`
 - setup como usuário (`02-user.sh`):
     - `paru` (AUR helper)
@@ -91,9 +90,6 @@ dev-setup/
 
 ### Resume após reboot
 O `setup.ps1` cria uma Scheduled Task (`DevSetupResume`) no Windows para retomar automaticamente depois do login quando houver reinicialização no meio do processo.
-
-### WSLInterop com systemd
-Com `systemd=true`, executáveis Windows no WSL dependem de registro em `binfmt_misc`. O script root gera `/usr/lib/binfmt.d/WSLInterop.conf` para corrigir isso de forma persistente.
 
 ### Ponte SSH Bitwarden -> WSL
 A integração usa `npiperelay` + `socat` para expor um socket Unix em `$HOME/.ssh/agent.sock` no WSL, permitindo `git`/`ssh` com as chaves do Bitwarden.
