@@ -5,8 +5,7 @@
 #  O que faz:
 #    - Atualiza pacman e instala pacotes base
 #    - Cria usuário com sudo
-#    - Configura wsl.conf (systemd, interop)
-#    - Corrige WSLInterop binfmt para systemd
+#    - Configura wsl.conf (systemd, usuário padrão)
 #    - Configura locale
 #
 #  Chamado automaticamente por setup.ps1
@@ -38,20 +37,20 @@ title "Arch Linux — Root Setup"
 info "Usuário a criar: $SETUP_USER"
 
 # ─── 1. Atualizar pacman ─────────────────────────────────────────────────────
-step "[1/6] Atualizando pacman..."
+step "[1/5] Atualizando pacman..."
 pacman-key --init
 pacman-key --populate archlinux
 pacman -Syu --noconfirm
 ok "Sistema atualizado"
 
 # ─── 2. Pacotes base ─────────────────────────────────────────────────────────
-step "[2/6] Instalando pacotes base..."
+step "[2/5] Instalando pacotes base..."
 pacman -S --noconfirm --needed \
     base-devel git curl wget sudo
 ok "Pacotes base instalados"
 
 # ─── 3. Criar usuário ────────────────────────────────────────────────────────
-step "[3/6] Criando usuário '$SETUP_USER'..."
+step "[3/5] Criando usuário '$SETUP_USER'..."
 
 if id "$SETUP_USER" &>/dev/null; then
     ok "Usuário $SETUP_USER já existe"
@@ -65,7 +64,7 @@ echo "$SETUP_USER:$SETUP_USER_PASS" | chpasswd
 ok "Senha definida"
 
 # ─── 4. Configurar sudo ──────────────────────────────────────────────────────
-step "[4/6] Configurando sudo..."
+step "[4/5] Configurando sudo..."
 
 if ! grep -q "^%wheel ALL=(ALL:ALL) NOPASSWD: ALL" /etc/sudoers; then
     sed -i 's/^# %wheel ALL=(ALL:ALL) NOPASSWD: ALL/%wheel ALL=(ALL:ALL) NOPASSWD: ALL/' /etc/sudoers
@@ -73,7 +72,7 @@ fi
 ok "Grupo wheel com NOPASSWD configurado"
 
 # ─── 5. wsl.conf ─────────────────────────────────────────────────────────────
-step "[5/6] Configurando /etc/wsl.conf..."
+step "[5/5] Configurando /etc/wsl.conf..."
 
 cat > /etc/wsl.conf << 'EOF'
 [user]
@@ -81,23 +80,13 @@ default=SETUP_USER_PLACEHOLDER
 
 [boot]
 systemd=true
-
-[interop]
-appendWindowsPath=false
 EOF
 
 # Substituir placeholder pelo usuário real
 sed -i "s/SETUP_USER_PLACEHOLDER/$SETUP_USER/" /etc/wsl.conf
 
 ok "wsl.conf configurado"
-info "  systemd=true | default user: $SETUP_USER | appendWindowsPath=false"
-
-# ─── 6. Corrigir WSLInterop + binfmt para systemd ────────────────────────────
-step "[6/6] Corrigindo WSLInterop com systemd..."
-
-# Sem isso, executáveis Windows (.exe) não funcionam no WSL após restart com systemd
-echo ':WSLInterop:M::MZ::/init:PF' > /usr/lib/binfmt.d/WSLInterop.conf
-ok "WSLInterop binfmt configurado (/usr/lib/binfmt.d/WSLInterop.conf)"
+info "  systemd=true | default user: $SETUP_USER"
 
 # Locale
 info "Configurando locale..."

@@ -138,19 +138,10 @@ default=SEU_USUARIO
 
 [boot]
 systemd=true
-
-[interop]
-appendWindowsPath=false
 EOF
 ```
 
-### 4.4 Corrigir WSLInterop para systemd
-
-```bash
-echo ':WSLInterop:M::MZ::/init:PF' > /usr/lib/binfmt.d/WSLInterop.conf
-```
-
-### 4.5 Locale
+### 4.4 Locale
 
 ```bash
 echo "en_US.UTF-8 UTF-8" >> /etc/locale.gen
@@ -158,7 +149,7 @@ locale-gen
 echo "LANG=en_US.UTF-8" >> /etc/environment
 ```
 
-### 4.6 Reiniciar WSL
+### 4.5 Reiniciar WSL
 
 ```powershell
 wsl --shutdown
